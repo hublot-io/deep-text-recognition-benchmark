@@ -235,6 +235,7 @@ class RawDataset(Dataset):
         return self.nSamples
 
     def __getitem__(self, index):
+
         try:
             im = Image.fromarray(self.images[index])
             if self.opt.rgb:
@@ -245,6 +246,12 @@ class RawDataset(Dataset):
         except IOError:
             print(f'Corrupted image for {index}')
             # make dummy image and dummy label for corrupted image.
+            if self.opt.rgb:
+                img = Image.new('RGB', (self.opt.imgW, self.opt.imgH))
+            else:
+                img = Image.new('L', (self.opt.imgW, self.opt.imgH))
+        except Exception as e:
+            print(f'An other e occured: for {index} : {self.images[index]}')
             if self.opt.rgb:
                 img = Image.new('RGB', (self.opt.imgW, self.opt.imgH))
             else:
