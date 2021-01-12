@@ -126,7 +126,7 @@ def hierarchical_dataset(root, opt, select_data='/'):
                 print(sub_dataset_log)
                 dataset_log += f'{sub_dataset_log}\n'
                 dataset_list.append(dataset)
-
+    print(dataset_list)
     concatenated_dataset = ConcatDataset(dataset_list)
 
     return concatenated_dataset, dataset_log

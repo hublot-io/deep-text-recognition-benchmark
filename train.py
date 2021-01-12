@@ -78,7 +78,7 @@ def train(opt):
     if opt.saved_model != '':
         print(f'loading pretrained model from {opt.saved_model}')
         if opt.FT:
-            model.load_state_dict(torch.load(opt.saved_model), strict=False)
+            model.load_state_dict(torch.load(opt.saved_model,map_location=torch.device('cpu')),  strict=False)
         else:
             model.load_state_dict(torch.load(opt.saved_model))
     print("Model:")
