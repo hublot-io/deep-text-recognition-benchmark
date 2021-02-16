@@ -11,7 +11,123 @@ from PIL import Image
 import numpy as np
 from torch.utils.data import Dataset, ConcatDataset, Subset
 from torch._utils import _accumulate
+from torch.utils.data import random_split, DataLoader, ConcatDataset
 import torchvision.transforms as transforms
+import traceback
+from pytorch_lightning import LightningDataModule
+from argparse import ArgumentParser
+
+
+class BatchBalancedDataModule(LightningDataModule):
+    def __init__(self, opt):
+        super().__init__()
+        self.opt = opt
+        self.batch_size = opt.batch_size
+    # def train_dataloader(self):
+    #     opt = self.opt
+    #     align_collate_train = AlignCollate(
+    #         imgH=opt.imgH, imgW=opt.imgW, keep_ratio_with_pad=opt.PAD)
+    #     print(f"BATCH_SIZE {self.opt.batch_size}")
+    #     # return DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=True, num_workers=opt.workers, collate_fn=align_collate_train)
+    #     return DataLoader(self.train_dataset, batch_size=self.opt.batch_max_length, shuffle=True, num_workers=opt.workers, collate_fn=align_collate_train)
+
+    def train_dataloader(self):
+        opt = self.opt
+        align_collate_train = AlignCollate(
+            imgH=opt.imgH, imgW=opt.imgW, keep_ratio_with_pad=opt.PAD)
+        #print(f"train_dataloader {len(self.train_dataset.data_loader_list)}")
+        # print(self.train_dataset.data_loader_list)
+        whole_dataset = ConcatDataset(self.train_dataset.datasets_list)
+        # whole_dataset = self.val_dataset
+        print(f"Total items: {len(whole_dataset)}")
+        return DataLoader(whole_dataset, pin_memory=True, batch_size=self.batch_size, num_workers=opt.workers, collate_fn=align_collate_train)
+
+    def val_dataloader(self):
+        opt = self.opt
+        align_collate_valid = AlignCollate(
+            imgH=opt.imgH, imgW=opt.imgW, keep_ratio_with_pad=opt.PAD)
+        return DataLoader(self.val_dataset, shuffle=True, batch_size=self.batch_size, num_workers=opt.workers, collate_fn=align_collate_valid)
+
+        # def val_dataloader(self):
+        #     return DataLoader(self.val_dataset, batch_size=self.batch_size)
+
+        # def test_dataloader(self):
+        #     return DataLoader(self.mnist_test, batch_size=self.batch_size)
+
+    def setup(self, stage):
+        opt = self.opt
+        assert len(opt.select_data) == len(opt.batch_ratio)
+        # AlignCollate_train = AlignCollate(
+        #     imgH=opt.imgH, imgW=opt.imgW, keep_ratio_with_pad=opt.PAD)
+        # train_dataset, train_dataset_log = hierarchical_dataset(
+        #     root=opt.train_data, opt=opt
+        # )
+
+        train_dataset = Batch_Balanced_Dataset(opt)
+        print("""
+            DATASET LOADED :
+        """)
+        # print(train_dataset)
+
+        # Now we have to split the dataset
+
+        # AlignCollate_train = AlignCollate(
+        #     imgH=opt.imgH, imgW=opt.imgW, keep_ratio_with_pad=opt.PAD)
+        # train_dataset, train_dataset_log = hierarchical_dataset(
+        #     root=opt.train_data, opt=opt)
+        # valid_loader = torch.utils.data.DataLoader(
+        #     valid_dataset, batch_size=opt.batch_size,
+        #     # 'True' to check training progress with validation function.
+        #     shuffle=True,
+        #     num_workers=int(opt.workers),
+        #     collate_fn=AlignCollate_valid, pin_memory=True)
+
+        # AlignCollate_valid = AlignCollate(
+        #     imgH=opt.imgH, imgW=opt.imgW, keep_ratio_with_pad=opt.PAD)
+        valid_dataset, valid_dataset_log = hierarchical_dataset(
+            root=opt.valid_data,
+            opt=opt
+        )
+        # valid_loader = torch.utils.data.DataLoader(
+        # valid_dataset, batch_size=opt.batch_size,
+        # #'True' to check training progress with validation function.
+        # shuffle=True,
+        # num_workers=int(opt.workers),
+        # collate_fn=AlignCollate_valid, pin_memory=True)
+
+        self.train_dataset = train_dataset
+        # self.train_dataset = valid_dataset
+
+        self.val_dataset = valid_dataset
+
+    @staticmethod
+    def add_argparse_args(parent_parser):
+        print("adding dataset specific args")
+        parser = ArgumentParser(parents=[parent_parser], add_help=False)
+        parser.add_argument('--batch_size', type=int,
+                            default=192, help='input batch size')
+        parser.add_argument('--select_data', type=str, default='MJ-ST',
+                            help='select training data (default is MJ-ST, which means MJ and ST used as training data)')
+        parser.add_argument('--batch_ratio', type=str, default='0.5-0.5',
+                            help='assign ratio for each selected data in the batch')
+        parser.add_argument('--total_data_usage_ratio', type=str, default='1.0',
+                            help='total data usage ratio, this ratio is multiplied to total number of data.')
+        parser.add_argument('--batch_max_length', type=int,
+                            default=25, help='maximum-label-length')
+        parser.add_argument('--imgH', type=int, default=32,
+                            help='the height of the input image')
+        parser.add_argument('--imgW', type=int, default=100,
+                            help='the width of the input image')
+        parser.add_argument('--rgb', action='store_true', help='use rgb input')
+        parser.add_argument('--character', type=str,
+                            default='0123456789abcdefghijklmnopqrstuvwxyz', help='character label')
+        parser.add_argument('--sensitive', action='store_true',
+                            help='for sensitive character mode')
+        parser.add_argument('--PAD', action='store_true',
+                            help='whether to keep ratio then pad for image resize')
+        parser.add_argument('--data_filtering_off',
+                            action='store_true', help='for data_filtering_off mode')
+        return parser
 
 
 class Batch_Balanced_Dataset(object):
@@ -22,14 +138,15 @@ class Batch_Balanced_Dataset(object):
         For example, when select_data is "MJ-ST" and batch_ratio is "0.5-0.5",
         the 50% of the batch is filled with MJ and the other 50% of the batch is filled with ST.
         """
-        log = open(f'./saved_models/{opt.exp_name}/log_dataset.txt', 'a')
+        # log = open(f'./saved_models/{opt.exp_name}/log_dataset.txt', 'a')
         dashed_line = '-' * 80
-        print(dashed_line)
-        log.write(dashed_line + '\n')
-        print(
-            f'dataset_root: {opt.train_data}\nopt.select_data: {opt.select_data}\nopt.batch_ratio: {opt.batch_ratio}')
-        log.write(
-            f'dataset_root: {opt.train_data}\nopt.select_data: {opt.select_data}\nopt.batch_ratio: {opt.batch_ratio}\n')
+
+        # #log.write(dashed_line + '\n')
+        # print(
+        #     f'dataset_root: {opt.train_data}\nopt.select_data: {opt.select_data}\nopt.batch_ratio: {opt.batch_ratio}')
+        # #log.write(
+        #     f'dataset_root: {opt.train_data}\nopt.select_data: {opt.select_data}\nopt.batch_ratio: {opt.batch_ratio}\n')
+        # print(f"{len(opt.select_data)} == {len(opt.batch_ratio)}")
         assert len(opt.select_data) == len(opt.batch_ratio)
 
         _AlignCollate = AlignCollate(
@@ -37,15 +154,17 @@ class Batch_Balanced_Dataset(object):
         self.data_loader_list = []
         self.dataloader_iter_list = []
         batch_size_list = []
+        self.datasets_list = []
         Total_batch_size = 0
         for selected_d, batch_ratio_d in zip(opt.select_data, opt.batch_ratio):
             _batch_size = max(round(opt.batch_size * float(batch_ratio_d)), 1)
-            print(dashed_line)
-            log.write(dashed_line + '\n')
+
+            # log.write(dashed_line + '\n')
             _dataset, _dataset_log = hierarchical_dataset(
                 root=opt.train_data, opt=opt, select_data=[selected_d])
             total_number_dataset = len(_dataset)
-            log.write(_dataset_log)
+            # log.write(_dataset_log)
+            # print(_dataset_log)
 
             """
             The total number of data can be modified with opt.total_data_usage_ratio.
@@ -61,8 +180,8 @@ class Batch_Balanced_Dataset(object):
                            for offset, length in zip(_accumulate(dataset_split), dataset_split)]
             selected_d_log = f'num total samples of {selected_d}: {total_number_dataset} x {opt.total_data_usage_ratio} (total_data_usage_ratio) = {len(_dataset)}\n'
             selected_d_log += f'num samples of {selected_d} per batch: {opt.batch_size} x {float(batch_ratio_d)} (batch_ratio) = {_batch_size}'
-            print(selected_d_log)
-            log.write(selected_d_log + '\n')
+            # print(selected_d_log)
+            # log.write(selected_d_log + '\n')
             batch_size_list.append(str(_batch_size))
             Total_batch_size += _batch_size
 
@@ -71,6 +190,7 @@ class Batch_Balanced_Dataset(object):
                 shuffle=True,
                 num_workers=int(opt.workers),
                 collate_fn=_AlignCollate, pin_memory=True)
+            self.datasets_list.append(_dataset)
             self.data_loader_list.append(_data_loader)
             self.dataloader_iter_list.append(iter(_data_loader))
 
@@ -79,10 +199,10 @@ class Batch_Balanced_Dataset(object):
         Total_batch_size_log += f'Total_batch_size: {batch_size_sum} = {Total_batch_size}\n'
         Total_batch_size_log += f'{dashed_line}'
         opt.batch_size = Total_batch_size
-
-        print(Total_batch_size_log)
-        log.write(Total_batch_size_log + '\n')
-        log.close()
+        self.batch_size = Total_batch_size
+        # print(Total_batch_size_log)
+        # log.write(Total_batch_size_log + '\n')
+        # log.close()
 
     def get_batch(self):
         balanced_batch_images = []
@@ -110,9 +230,10 @@ def hierarchical_dataset(root, opt, select_data='/'):
     """ select_data='/' contains all sub-directory of root directory """
     dataset_list = []
     dataset_log = f'dataset_root:    {root}\t dataset: {select_data[0]}'
-    print(dataset_log)
+    # print(dataset_log)
     dataset_log += '\n'
     for dirpath, dirnames, filenames in os.walk(root + '/'):
+        # print("walking in {} : {}".format(dirpath, dirnames))
         if not dirnames:
             select_flag = False
             for selected_d in select_data:
@@ -121,12 +242,13 @@ def hierarchical_dataset(root, opt, select_data='/'):
                     break
 
             if select_flag:
+                # print("got dataset {} {}".format(dirpath, opt))
                 dataset = LmdbDataset(dirpath, opt)
                 sub_dataset_log = f'sub-directory:\t/{os.path.relpath(dirpath, root)}\t num samples: {len(dataset)}'
-                print(sub_dataset_log)
+                # print(sub_dataset_log)
                 dataset_log += f'{sub_dataset_log}\n'
                 dataset_list.append(dataset)
-    print(dataset_list)
+    # print(dataset_list)
     concatenated_dataset = ConcatDataset(dataset_list)
 
     return concatenated_dataset, dataset_log
@@ -145,7 +267,10 @@ class LmdbDataset(Dataset):
             sys.exit(0)
 
         with self.env.begin(write=False) as txn:
+            # print("getting samples")
+            # print(txn)
             nSamples = int(txn.get('num-samples'.encode()))
+            # print("got samples")
             self.nSamples = nSamples
 
             if self.opt.data_filtering_off:
@@ -163,6 +288,7 @@ class LmdbDataset(Dataset):
                 see https://github.com/clovaai/deep-text-recognition-benchmark/blob/dff844874dbe9e0ec8c5a52a7bd08c7f20afe704/test.py#L137-L144
                 """
                 self.filtered_index_list = []
+                # print("range: {}".format(range(self.nSamples)))
                 for index in range(self.nSamples):
                     index += 1  # lmdb starts with 1
                     label_key = 'label-%09d'.encode() % index
@@ -182,6 +308,7 @@ class LmdbDataset(Dataset):
                     self.filtered_index_list.append(index)
 
                 self.nSamples = len(self.filtered_index_list)
+                # print("done filtering")
 
     def __len__(self):
         return self.nSamples
