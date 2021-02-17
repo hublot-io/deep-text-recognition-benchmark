@@ -17,6 +17,7 @@ limitations under the License.
 import torch.nn as nn
 
 from pytorch_lightning import LightningModule
+from pytorch_lightning.core.decorators import auto_move_data
 from modules.transformation import TPS_SpatialTransformerNetwork
 from modules.feature_extraction import VGG_FeatureExtractor, RCNN_FeatureExtractor, ResNet_FeatureExtractor
 from modules.sequence_modeling import BidirectionalLSTM
@@ -109,7 +110,7 @@ class Model(LightningModule):
         self.save_hyperparameters()
 
         # self.logger.experiment.add_hparams(self.hparams)
-
+    @auto_move_data
     def forward(self, input, text, is_train=True):
         """ Transformation stage """
         if not self.stages['Trans'] == "None":
