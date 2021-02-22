@@ -327,6 +327,7 @@ if __name__ == '__main__':
     opt = parser.parse_args()
 
     # load the right converter for the model
+    opt.character = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!\"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~"
     converter = AttnLabelConverter(opt.character)
     opt.num_class = len(converter.character)
 
@@ -353,9 +354,12 @@ if __name__ == '__main__':
     grid = torchvision.utils.make_grid(imgs)
 
     seed = opt.manualSeed
+
     print(f"FT  {opt.FT}, ckpt {opt.ckpt}")
+    resume = None
     if (opt.FT is True and opt.ckpt is not None):
         print(f"Loaded model from {opt.ckpt}")
+        resume = opt.ckpt
         model = Model.load_from_checkpoint(opt.ckpt)
     else:
         # seed_everything(seed)
@@ -381,6 +385,7 @@ if __name__ == '__main__':
     trainer = Trainer.from_argparse_args(
         opt,
         gpus=1,
+        resume_from_checkpoint=resume,
         logger=logger,
         profiler="simple",
         # limit_train_batches=10,

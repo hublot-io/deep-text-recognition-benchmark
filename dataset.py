@@ -46,7 +46,7 @@ class BatchBalancedDataModule(LightningDataModule):
         opt = self.opt
         align_collate_valid = AlignCollate(
             imgH=opt.imgH, imgW=opt.imgW, keep_ratio_with_pad=opt.PAD)
-        return DataLoader(self.val_dataset, shuffle=True, batch_size=self.batch_size, num_workers=opt.workers, collate_fn=align_collate_valid)
+        return DataLoader(self.val_dataset, pin_memory=True, shuffle=True, batch_size=self.batch_size, num_workers=opt.workers, collate_fn=align_collate_valid)
 
         # def val_dataloader(self):
         #     return DataLoader(self.val_dataset, batch_size=self.batch_size)
@@ -56,6 +56,7 @@ class BatchBalancedDataModule(LightningDataModule):
 
     def setup(self, stage):
         opt = self.opt
+        print(f"LEN: {len(opt.select_data)} - {len(opt.batch_ratio)}")
         assert len(opt.select_data) == len(opt.batch_ratio)
         # AlignCollate_train = AlignCollate(
         #     imgH=opt.imgH, imgW=opt.imgW, keep_ratio_with_pad=opt.PAD)

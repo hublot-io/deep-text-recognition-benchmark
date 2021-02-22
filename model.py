@@ -28,8 +28,12 @@ from utils import CTCLabelConverter, AttnLabelConverter, Averager
 from torch.nn import functional as F
 import re
 from os import environ
-if environ.get("TRAIN") is "True":
+
+if environ.get("TRAIN") == "True":
     from test import validation
+else:
+    validation = None
+print(validation)
 from torch.utils.tensorboard import SummaryWriter
 import torchvision
 from PIL import Image
@@ -202,7 +206,7 @@ class Model(LightningModule):
         }
 
     def validation_epoch_end(self, preds_output):
-        if (environ.get("TRAIN") is "False"):
+        if (environ.get("TRAIN") == "False"):
             pass
         else:
             opt = self.opt
