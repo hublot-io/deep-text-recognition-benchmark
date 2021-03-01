@@ -40,13 +40,13 @@ class BatchBalancedDataModule(LightningDataModule):
         whole_dataset = ConcatDataset(self.train_dataset.datasets_list)
         # whole_dataset = self.val_dataset
         print(f"Total items: {len(whole_dataset)}")
-        return DataLoader(whole_dataset, pin_memory=True, batch_size=self.batch_size, num_workers=opt.workers, collate_fn=align_collate_train)
+        return DataLoader(whole_dataset, shuffle=True, batch_size=self.batch_size, num_workers=opt.workers, collate_fn=align_collate_train)
 
     def val_dataloader(self):
         opt = self.opt
         align_collate_valid = AlignCollate(
             imgH=opt.imgH, imgW=opt.imgW, keep_ratio_with_pad=opt.PAD)
-        return DataLoader(self.val_dataset, pin_memory=True, shuffle=True, batch_size=self.batch_size, num_workers=opt.workers, collate_fn=align_collate_valid)
+        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=opt.workers, collate_fn=align_collate_valid)
 
         # def val_dataloader(self):
         #     return DataLoader(self.val_dataset, batch_size=self.batch_size)
@@ -413,7 +413,7 @@ class NormalizePAD(object):
         img = self.toTensor(img)
         img.sub_(0.5).div_(0.5)
         c, h, w = img.size()
-        Pad_img = torch.FloatTensor(*self.max_size).fill_(0)
+        Pad_img = torch.zeros(*self.max_size, dtype=torch.float)
         Pad_img[:, :, :w] = img  # right pad
         if self.max_size[2] != w:  # add border Pad
             Pad_img[:, :, w:] = img[:, :, w -

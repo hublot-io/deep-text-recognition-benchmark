@@ -19,7 +19,7 @@ class TPS_SpatialTransformerNetwork(LightningModule):
         output:
             batch_I_r: rectified image [batch_size x I_channel_num x I_r_height x I_r_width]
         """
-        super(TPS_SpatialTransformerNetwork, self).__init__()
+        super().__init__()
         self.F = F
         self.I_size = I_size
         self.I_r_size = I_r_size  # = (I_r_height, I_r_width)
@@ -52,7 +52,7 @@ class LocalizationNetwork(LightningModule):
     """ Localization Network of RARE, which predicts C' (K x 2) from I (I_width x I_height) """
 
     def __init__(self, F, I_channel_num):
-        super(LocalizationNetwork, self).__init__()
+        super().__init__()
         self.F = F
         self.I_channel_num = I_channel_num
         self.conv = nn.Sequential(
@@ -101,9 +101,14 @@ class LocalizationNetwork(LightningModule):
 class GridGenerator(LightningModule):
     """ Grid Generator of RARE, which produces P_prime by multipling T with P """
 
+    __constants__ = ["device"]
+
+    def forward(self, args):
+        return
+
     def __init__(self, F, I_r_size):
         """ Generate P_hat and inv_delta_C for later """
-        super(GridGenerator, self).__init__()
+        super().__init__()
         self.eps = 1e-6
         self.I_r_height, self.I_r_width = I_r_size
         self.F = F
@@ -181,8 +186,9 @@ class GridGenerator(LightningModule):
         batch_size = batch_C_prime.size(0)
         batch_inv_delta_C = self.inv_delta_C.repeat(batch_size, 1, 1)
         batch_P_hat = self.P_hat.repeat(batch_size, 1, 1)
-        batch_C_prime_with_zeros = torch.cat((batch_C_prime, torch.zeros(
-            batch_size, 3, 2).float().to(device)), dim=1)  # batch_size x F+3 x 2
+        t_2 = torch.zeros(batch_size, 3, 2, dtype=torch.float).to(self.device)
+        batch_C_prime_with_zeros = torch.cat(
+            (batch_C_prime, t_2), dim=1)  # batch_size x F+3 x 2
         # batch_size x F+3 x 2
         batch_T = torch.bmm(batch_inv_delta_C, batch_C_prime_with_zeros)
         batch_P_prime = torch.bmm(batch_P_hat, batch_T)  # batch_size x n x 2

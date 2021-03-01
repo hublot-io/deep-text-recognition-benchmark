@@ -7,7 +7,7 @@ class VGG_FeatureExtractor(LightningModule):
     """ FeatureExtractor of CRNN (https://arxiv.org/pdf/1507.05717.pdf) """
 
     def __init__(self, input_channel, output_channel=512):
-        super(VGG_FeatureExtractor, self).__init__()
+        super().__init__()
         self.output_channel = [int(output_channel / 8), int(output_channel / 4),
                                int(output_channel / 2), output_channel]  # [64, 128, 256, 512]
         self.ConvNet = nn.Sequential(
@@ -39,7 +39,7 @@ class RCNN_FeatureExtractor(LightningModule):
     """ FeatureExtractor of GRCNN (https://papers.nips.cc/paper/6637-gated-recurrent-convolution-neural-network-for-ocr.pdf) """
 
     def __init__(self, input_channel, output_channel=512):
-        super(RCNN_FeatureExtractor, self).__init__()
+        super().__init__()
         self.output_channel = [int(output_channel / 8), int(output_channel / 4),
                                int(output_channel / 2), output_channel]  # [64, 128, 256, 512]
         self.ConvNet = nn.Sequential(
@@ -67,7 +67,7 @@ class ResNet_FeatureExtractor(LightningModule):
     """ FeatureExtractor of FAN (http://openaccess.thecvf.com/content_ICCV_2017/papers/Cheng_Focusing_Attention_Towards_ICCV_2017_paper.pdf) """
 
     def __init__(self, input_channel, output_channel=512):
-        super(ResNet_FeatureExtractor, self).__init__()
+        super().__init__()
         self.ConvNet = ResNet(input_channel, output_channel,
                               BasicBlock, [1, 2, 5, 3])
 
@@ -79,7 +79,7 @@ class ResNet_FeatureExtractor(LightningModule):
 class GRCL(LightningModule):
 
     def __init__(self, input_channel, output_channel, num_iteration, kernel_size, pad):
-        super(GRCL, self).__init__()
+        super().__init__()
         self.wgf_u = nn.Conv2d(
             input_channel, output_channel, 1, 1, 0, bias=False)
         self.wgr_x = nn.Conv2d(
@@ -112,7 +112,7 @@ class GRCL(LightningModule):
 class GRCL_unit(LightningModule):
 
     def __init__(self, output_channel):
-        super(GRCL_unit, self).__init__()
+        super().__init__()
         self.BN_gfu = nn.BatchNorm2d(output_channel)
         self.BN_grx = nn.BatchNorm2d(output_channel)
         self.BN_fu = nn.BatchNorm2d(output_channel)
@@ -135,7 +135,7 @@ class BasicBlock(LightningModule):
     expansion = 1
 
     def __init__(self, inplanes, planes, stride=1, downsample=None):
-        super(BasicBlock, self).__init__()
+        super().__init__()
         self.conv1 = self._conv3x3(inplanes, planes)
         self.bn1 = nn.BatchNorm2d(planes)
         self.conv2 = self._conv3x3(planes, planes)
@@ -170,7 +170,7 @@ class BasicBlock(LightningModule):
 class ResNet(LightningModule):
 
     def __init__(self, input_channel, output_channel, block, layers):
-        super(ResNet, self).__init__()
+        super().__init__()
 
         self.output_channel_block = [
             int(output_channel / 4), int(output_channel / 2), output_channel, output_channel]

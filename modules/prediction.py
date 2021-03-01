@@ -9,7 +9,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 class Attention(LightningModule):
 
     def __init__(self, input_size, hidden_size, num_classes):
-        super(Attention, self).__init__()
+        super().__init__()
         self.attention_cell = AttentionCell(
             input_size, hidden_size, num_classes)
         self.hidden_size = hidden_size
@@ -18,9 +18,10 @@ class Attention(LightningModule):
 
     def _char_to_onehot(self, input_char, onehot_dim=38):
 
-        input_char = input_char.unsqueeze(1).to(device)
+        input_char = input_char.unsqueeze(1)  # .to(device)
         batch_size = input_char.size(0)
-        one_hot = torch.FloatTensor(batch_size, onehot_dim).zero_().to(device)
+        one_hot = torch.empty(
+            batch_size, onehot_dim, device=self.device).zero_()  # .to(device)
         one_hot = one_hot.scatter_(1, input_char, 1)
         return one_hot
 
@@ -34,10 +35,10 @@ class Attention(LightningModule):
         batch_size = batch_H.size(0)
         num_steps = batch_max_length + 1  # +1 for [s] at end of sentence.
 
-        output_hiddens = torch.FloatTensor(
-            batch_size, num_steps, self.hidden_size).fill_(0).to(device)
-        hidden = (torch.FloatTensor(batch_size, self.hidden_size).fill_(0).to(device),
-                  torch.FloatTensor(batch_size, self.hidden_size).fill_(0).to(device))
+        output_hiddens = torch.zeros(
+            batch_size, num_steps, self.hidden_size, device=self.device, dtype=torch.float)  # .to(device)
+        hidden = (torch.zeros(batch_size, self.hidden_size, device=self.device, dtype=torch.float),  # .to(device),
+                  torch.zeros(batch_size, self.hidden_size, device=self.device, dtype=torch.float))  # .to(device))
 
         if is_train:
             for i in range(num_steps):
@@ -52,10 +53,11 @@ class Attention(LightningModule):
             probs = self.generator(output_hiddens)
 
         else:
-            targets = torch.LongTensor(batch_size).fill_(
-                0).to(device)  # [GO] token
-            probs = torch.FloatTensor(
-                batch_size, num_steps, self.num_classes).fill_(0).to(device)
+            # .to(device)  # [GO] token
+            targets = torch.zeros(
+                batch_size, device=self.device, dtype=torch.long)
+            probs = torch.zeros(
+                batch_size, num_steps, self.num_classes, device=self.device, dtype=torch.float)  # .to(device)
 
             for i in range(num_steps):
                 char_onehots = self._char_to_onehot(
@@ -73,7 +75,7 @@ class Attention(LightningModule):
 class AttentionCell(LightningModule):
 
     def __init__(self, input_size, hidden_size, num_embeddings):
-        super(AttentionCell, self).__init__()
+        super().__init__()
         self.i2h = nn.Linear(input_size, hidden_size, bias=False)
         # either i2i or h2h should have bias
         self.h2h = nn.Linear(hidden_size, hidden_size)

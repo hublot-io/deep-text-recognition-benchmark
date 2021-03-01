@@ -1,5 +1,5 @@
 import torch
-#device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+from pytorch_lightning.utilities.device_dtype_mixin import DeviceDtypeModuleMixin
 
 
 class CTCLabelConverter(object):
@@ -30,7 +30,8 @@ class CTCLabelConverter(object):
         length = [len(s) for s in text]
 
         # The index used for padding (=0) would not affect the CTC loss calculation.
-        batch_text = torch.LongTensor(len(text), batch_max_length).fill_(0)
+        batch_text = torch.zeros(
+            len(text), batch_max_length, dtype=torch.float)
         for i, t in enumerate(text):
             text = list(t)
             text = [self.dict[char] for char in text]
@@ -54,10 +55,11 @@ class CTCLabelConverter(object):
         return texts
 
 
-class AttnLabelConverter(object):
+class AttnLabelConverter(DeviceDtypeModuleMixin):
     """ Convert between text-label and text-index """
 
     def __init__(self, character):
+        super().__init__()
         # character (str): set of the possible characters.
         # [GO] for the start token of the attention decoder. [s] for end-of-sentence token.
         list_token = ['[GO]', '[s]']  # ['[s]','[UNK]','[PAD]','[GO]']
@@ -84,14 +86,16 @@ class AttnLabelConverter(object):
         # batch_max_length = max(length) # this is not allowed for multi-gpu setting
         batch_max_length += 1
         # additional +1 for [GO] at first step. batch_text is padded with [GO] token after [s] token.
-        batch_text = torch.LongTensor(len(text), batch_max_length + 1).fill_(0)
+        batch_text = torch.zeros(
+            len(text), batch_max_length + 1, device=self.device, dtype=torch.long)
         for i, t in enumerate(text):
             text = list(t)
             text.append('[s]')
             text = [self.dict[char] for char in text]
             # batch_text[:, 0] = [GO] token
-            batch_text[i][1:1 + len(text)] = torch.LongTensor(text)
-        return (batch_text, torch.IntTensor(length))
+            batch_text[i][1:1 + len(text)] = torch.tensor(text,
+                                                          device=self.device, dtype=torch.long)
+        return (batch_text, torch.tensor(length, device=self.device, dtype=torch.int))
 
     def decode(self, text_index, length):
         """ convert text-index into text-label. """

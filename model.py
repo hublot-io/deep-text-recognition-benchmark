@@ -57,7 +57,7 @@ def matplotlib_imshow(img, one_channel=False):
 class Model(LightningModule):
 
     def __init__(self, opt):
-        super(Model, self).__init__()
+        super().__init__()
         self.opt = opt
         self.last_accuracy = 0
         self.training_losses = []
@@ -152,20 +152,20 @@ class Model(LightningModule):
             labels, batch_max_length=opt.batch_max_length)
         batch_size = image.size(0)
         # align with Attention.forward
-        preds = self(image, text[:, :-1]).to(device)
-        target = text[:, 1:].to(device)  # without [GO] Symbol
+        preds = self(image, text[:, :-1])  # .to(device)
+        target = text[:, 1:]  # .to(device)  # without [GO] Symbol
         total = len(labels)
         length_for_pred = torch.IntTensor(
-            [opt.batch_max_length] * batch_size).to(device)
-        text_for_pred = torch.LongTensor(
-            batch_size, opt.batch_max_length + 1).fill_(0).to(device)
+            [opt.batch_max_length] * batch_size)  # .to(device)
+        text_for_pred = torch.zeros(
+            batch_size, opt.batch_max_length + 1, dtype=torch.float)  # .to(device)
 
         text_for_loss, length_for_loss = self.converter.encode(
             labels,
             batch_max_length=opt.batch_max_length)
 
         preds = preds[:, :text_for_loss.shape[1] - 1, :]
-        target = text_for_loss[:, 1:].to(device)  # without [GO] Symbol
+        target = text_for_loss[:, 1:]  # .to(device)  # without [GO] Symbol
 
         # select max probabilty (greedy decoding) then decode index to character
         _, preds_index = preds.max(2)
