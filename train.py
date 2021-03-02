@@ -24,53 +24,9 @@ from pytorch_lightning.profiler import PyTorchProfiler
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 import torchvision
 
-
-def run_banchmark(opt):
-    dm = BatchBalancedDataModule(opt)
-    print(
-        f"Lets init the dataloader, batchsize = {opt.batch_size}, workers: {opt.workers}")
-    seed = opt.manualSeed
-    seed_everything(seed)
-    model = Model(opt)
-
-    logger = TensorBoardLogger("lightning_logs", name="ocr")
-    # logger.experiment.add_hparams(vars(model.hparams), {})
-    trainer = Trainer.from_argparse_args(
-        opt,
-        gpus=1,
-        logger=logger,
-        profiler="simple",
-        # limit_train_batches=10,
-        max_epochs=1,
-        # doubles the batch size, without doubling it's VRAM footprint
-        # to fake a bigger batch_size -> dired_batch_size / current_batch_size
-        accumulate_grad_batches=1,
-        precision=16,  # uses 16bit floats instead of 32, less RAM usage, faster, without real performance decrease
-        distributed_backend='ddp',
-        deterministic=True,
-        val_check_interval=opt.valInterval
-
-
-    )
-
-    # trainer.tune(model, datamodule=dm)
-    trainer.fit(model, dm)
-    accuracy = model.last_accuracy
-    shown_params = {
-        "lr": opt["lr"],
-        "num_fiducial": opt["num_fiducial"],
-        "output_channel": opt["output_channel"],
-        "hidden_size": opt["hidden_size"],
-        "manualSeed": opt["manualSeed"]
-    }
-
-    logger.experiment.add_hparams(shown_params, {"hparam/accuracy": accuracy})
-
-
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--exp_name', help='Where to store logs and models')
     parser.add_argument('--train_data', required=True,
                         help='path to training dataset')
     parser.add_argument('--valid_data', required=True,
@@ -79,34 +35,16 @@ if __name__ == '__main__':
                         default=1111, help='for random seed setting')
     parser.add_argument('--workers', type=int,
                         help='number of data loading workers', default=4)
-
-    # parser.add_argument('--batch_size', type=int,
-    #                     default=192, help='input batch size')
-
-    parser.add_argument('--num_iter', type=int, default=300000,
-                        help='number of iterations to train for')
     parser.add_argument('--valInterval', type=float, default=0.25,
                         help='Validate every x% of the training set')
-    parser.add_argument('--saved_model', default='',
-                        help="path to model to continue training")
     parser.add_argument('--FT', action='store_true',
                         help='whether to do fine-tuning')
     parser.add_argument('--ckpt', type=str, default=None,
                         help="[If FT] path to load the ckpt model")
-    parser.add_argument('--adam', action='store_true',
-                        help='Whether to use adam (default is Adadelta)')
     parser.add_argument('--lr', type=float, default=1,
                         help='learning rate, default=1.0 for Adadelta')
-
     parser.add_argument('--beta1', type=float, default=0.9,
                         help='beta1 for adam. default=0.9')
-
-    parser.add_argument('--rho', type=float, default=0.95,
-                        help='decay rate rho for Adadelta. default=0.95')
-
-    parser.add_argument('--eps', type=float, default=1e-8,
-                        help='eps for Adadelta. default=1e-8')
-
     parser.add_argument('--grad_clip', type=float, default=5,
                         help='gradient clipping value. default=5')
 
@@ -154,21 +92,14 @@ if __name__ == '__main__':
         model = Model(opt)
     logger = TensorBoardLogger("lightning_logs", name="ocr")
 
-    # sampleImg = batch[0][0]
-    # sampleTxt = batch[1][0]
     sampleImg = torch.rand(1, 1, 32, 100, device=device)
     sampleTxt = torch.full((1, 26), 0, device=device)
     custom_opts = opt
-    # custom_opts.transformation = None
+
     logger.experiment.add_image("images", grid, 0)
 
     r = model(sampleImg, sampleTxt)
 
-    # from torchviz import make_dot
-    # print(f"model result {r} -> mean = {r.mean()}")
-    # dot = make_dot(r.mean(), params=dict(model.named_parameters()))
-    # dot.save()
-    # print("done rendering")
     logger.experiment.add_graph(
         Model(custom_opts).to(device), (sampleImg, sampleTxt))
 
@@ -178,7 +109,7 @@ if __name__ == '__main__':
 
     logger.experiment.add_hparams(vars(model.hparams), {})
 
-    # torch_profiler = PyTorchProfiler(emit_nvtx=True)
+    torch_profiler = PyTorchProfiler(emit_nvtx=True)
     trainer = Trainer.from_argparse_args(
         opt,
         gpus=1,
@@ -189,7 +120,7 @@ if __name__ == '__main__':
         # profiler=torch_profiler,
 
         # limit_train_batches=10,
-        # max_epochs=1,
+        max_epochs=1,
         # doubles the batch size, without doubling it's VRAM footprint
         # to fake a bigger batch_size -> dired_batch_size / current_batch_size
         accumulate_grad_batches=4,
@@ -203,60 +134,7 @@ if __name__ == '__main__':
         gradient_clip_val=opt.grad_clip,
         val_check_interval=opt.valInterval
     )
-
-    # lr_finder = trainer.tuner.lr_find(model, datamodule=dm)
-    # # fig = lr_finder.plot(suggest=True)
-    # # fig.show()
-    # new_lr = lr_finder.suggestion()
-    # print(f"Found a good starting learning rate: {new_lr}")
-    # model.hparams.lr = new_lr
-    # model.opt.lr = new_lr
-
-    # trainer.tune(model, datamodule=dm)
    # enable cudnn benchmark
-    # torch.backends.cudnn.benchmark = True
-    # torch.backends.cudnn.enabled = True
+    torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.enabled = True
     trainer.fit(model, dm)
-
-    # torch.jit.save(model.to_torchscript(), "model.pt")
-
-    # if not opt.exp_name:
-    #     opt.exp_name = f'{opt.Transformation}-{opt.FeatureExtraction}-{opt.SequenceModeling}-{opt.Prediction}'
-    #     opt.exp_name += f'-Seed{opt.manualSeed}'
-    #     # print(opt.exp_name)
-
-    # os.makedirs(f'./saved_models/{opt.exp_name}', exist_ok=True)
-
-    # """ vocab / character number configuration """
-    # if opt.sensitive:
-    #     # opt.character += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-    #     # same with ASTER setting (use 94 char).
-    #     opt.character = string.printable[:-6]
-    #     # opt.character = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!\"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~"
-    # """ Seed and GPU setting """
-    # # print("Random Seed: ", opt.manualSeed)
-    # random.seed(opt.manualSeed)
-    # np.random.seed(opt.manualSeed)
-    # torch.manual_seed(opt.manualSeed)
-    # torch.cuda.manual_seed(opt.manualSeed)
-    # print("MODEL SEEDED")
-    # cudnn.benchmark = True
-    # cudnn.deterministic = True
-    # opt.num_gpu = torch.cuda.device_count()
-    # print('device count', opt.num_gpu)
-    # if opt.num_gpu > 1:
-    #     print('------ Use multi-GPU setting ------')
-    #     print('if you stuck too long time with multi-GPU setting, try to set --workers 0')
-    #     # check multi-GPU issue https://github.com/clovaai/deep-text-recognition-benchmark/issues/1
-    #     opt.workers = opt.workers * opt.num_gpu
-    #     opt.batch_size = opt.batch_size * opt.num_gpu
-
-    #     """ previous version
-    #     print('To equlize batch stats to 1-GPU setting, the batch_size is multiplied with num_gpu and multiplied batch_size is ', opt.batch_size)
-    #     opt.batch_size = opt.batch_size * opt.num_gpu
-    #     print('To equalize the number of epochs to 1-GPU setting, num_iter is divided with num_gpu by default.')
-    #     If you dont care about it, just commnet out these line.)
-    #     opt.num_iter = int(opt.num_iter / opt.num_gpu)
-    #     """
-    # print("started training, with opts: {}".format(opt))
-    # train(opt)

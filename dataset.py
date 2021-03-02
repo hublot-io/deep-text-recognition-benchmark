@@ -37,8 +37,8 @@ class BatchBalancedDataModule(LightningDataModule):
             imgH=opt.imgH, imgW=opt.imgW, keep_ratio_with_pad=opt.PAD)
         #print(f"train_dataloader {len(self.train_dataset.data_loader_list)}")
         # print(self.train_dataset.data_loader_list)
-        whole_dataset = ConcatDataset(self.train_dataset.datasets_list)
-        # whole_dataset = self.val_dataset
+        # whole_dataset = ConcatDataset(self.train_dataset.datasets_list)
+        whole_dataset = self.val_dataset
         print(f"Total items: {len(whole_dataset)}")
         return DataLoader(whole_dataset, shuffle=True, batch_size=self.batch_size, num_workers=opt.workers, collate_fn=align_collate_train)
 
@@ -64,7 +64,7 @@ class BatchBalancedDataModule(LightningDataModule):
         #     root=opt.train_data, opt=opt
         # )
 
-        train_dataset = Batch_Balanced_Dataset(opt)
+        # train_dataset = Batch_Balanced_Dataset(opt)
         print("""
             DATASET LOADED :
         """)
@@ -96,8 +96,8 @@ class BatchBalancedDataModule(LightningDataModule):
         # num_workers=int(opt.workers),
         # collate_fn=AlignCollate_valid, pin_memory=True)
 
-        self.train_dataset = train_dataset
-        # self.train_dataset = valid_dataset
+        # self.train_dataset = train_dataset
+        self.train_dataset = valid_dataset
 
         self.val_dataset = valid_dataset
 
