@@ -24,6 +24,9 @@ from pytorch_lightning.profiler import PyTorchProfiler
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 import torchvision
 
+# Set the default device to k80
+# torch.cuda.device(1)
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
@@ -37,6 +40,8 @@ if __name__ == '__main__':
                         help='number of data loading workers', default=4)
     parser.add_argument('--valInterval', type=float, default=0.25,
                         help='Validate every x% of the training set')
+    parser.add_argument('--numEpoch', type=int, default=10,
+                        help='Max num of epochs')
     parser.add_argument('--FT', action='store_true',
                         help='whether to do fine-tuning')
     parser.add_argument('--ckpt', type=str, default=None,
@@ -53,13 +58,19 @@ if __name__ == '__main__':
     opt = parser.parse_args()
 
     # load the right converter for the model
-    opt.character = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!\"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~"
+    # opt.character = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!\"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~"
+    opt.character = "0123456789abcdefghijklmnopqrstuvwxyz!\"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~"
+
     converter = AttnLabelConverter(opt.character)
     opt.num_class = len(converter.character)
 
     # fix: from readable arg to usable data
     opt.select_data = opt.select_data.split('-')
     opt.batch_ratio = opt.batch_ratio.split('-')
+ 
+    opt.select_valid = opt.select_valid.split('-')
+    opt.batch_valid = opt.batch_valid.split('-')
+    
     dm = BatchBalancedDataModule(opt)
     print(
         f"Lets init the dataloader, batchsize = {opt.batch_size}, workers: {opt.workers}")
@@ -109,31 +120,40 @@ if __name__ == '__main__':
 
     logger.experiment.add_hparams(vars(model.hparams), {})
 
-    torch_profiler = PyTorchProfiler(emit_nvtx=True)
+    # torch_profiler = PyTorchProfiler(emit_nvtx=True)
+
     trainer = Trainer.from_argparse_args(
         opt,
-        gpus=1,
+        gpus=[0],
+        fast_dev_run=True,
         resume_from_checkpoint=resume,
         logger=logger,
-
-        # profiler="pytorch",
+        # profiler=True,
         # profiler=torch_profiler,
-
+        # auto_lr_find=True,
         # limit_train_batches=10,
-        max_epochs=1,
+        max_epochs=opt.numEpoch,
         # doubles the batch size, without doubling it's VRAM footprint
         # to fake a bigger batch_size -> dired_batch_size / current_batch_size
-        accumulate_grad_batches=4,
+        # accumulate_grad_batches=2,
         precision=16,  # uses 16bit floats instead of 32, less RAM usage, faster, without real performance decrease
         # auto_scale_batch_size='power'
+        accelerator='ddp',
         distributed_backend='ddp',
-        # benchmark=True,
+
         #  deterministic=True,
         auto_scale_batch_size='binsearch',
         # auto_lr_find=True,
         gradient_clip_val=opt.grad_clip,
-        val_check_interval=opt.valInterval
+        val_check_interval=opt.valInterval,
+
     )
+
+    # lr_finder = trainer.tuner.lr_find(model, dm)
+    # print(f"Best lr value: {lr_finder.suggestion()} ")
+    # print(lr_finder.results)
+    # fig = lr_finder.plot()
+    # fig.show()
    # enable cudnn benchmark
     torch.backends.cudnn.benchmark = True
     torch.backends.cudnn.enabled = True

@@ -16,6 +16,7 @@ import torchvision.transforms as transforms
 import traceback
 from pytorch_lightning import LightningDataModule
 from argparse import ArgumentParser
+from dotmap import DotMap
 
 
 class BatchBalancedDataModule(LightningDataModule):
@@ -37,16 +38,20 @@ class BatchBalancedDataModule(LightningDataModule):
             imgH=opt.imgH, imgW=opt.imgW, keep_ratio_with_pad=opt.PAD)
         #print(f"train_dataloader {len(self.train_dataset.data_loader_list)}")
         # print(self.train_dataset.data_loader_list)
-        # whole_dataset = ConcatDataset(self.train_dataset.datasets_list)
-        whole_dataset = self.val_dataset
-        print(f"Total items: {len(whole_dataset)}")
-        return DataLoader(whole_dataset, shuffle=True, batch_size=self.batch_size, num_workers=opt.workers, collate_fn=align_collate_train)
+        whole_dataset = ConcatDataset(self.train_dataset.datasets_list)
+        # whole_dataset = ConcatDataset(self.val_dataset.datasets_list)
+
+        # whole_dataset = self.val_dataset
+        # print(f"Total items: {len(whole_dataset)}")
+        return DataLoader(whole_dataset, batch_size=self.batch_size, num_workers=opt.workers, collate_fn=align_collate_train, shuffle=True)
 
     def val_dataloader(self):
         opt = self.opt
         align_collate_valid = AlignCollate(
             imgH=opt.imgH, imgW=opt.imgW, keep_ratio_with_pad=opt.PAD)
-        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=opt.workers, collate_fn=align_collate_valid)
+        # return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=opt.workers, collate_fn=align_collate_valid)
+        whole_dataset = ConcatDataset(self.val_dataset.datasets_list)
+        return DataLoader(whole_dataset, batch_size=self.batch_size, num_workers=opt.workers, collate_fn=align_collate_valid)
 
         # def val_dataloader(self):
         #     return DataLoader(self.val_dataset, batch_size=self.batch_size)
@@ -56,7 +61,6 @@ class BatchBalancedDataModule(LightningDataModule):
 
     def setup(self, stage):
         opt = self.opt
-        print(f"LEN: {len(opt.select_data)} - {len(opt.batch_ratio)}")
         assert len(opt.select_data) == len(opt.batch_ratio)
         # AlignCollate_train = AlignCollate(
         #     imgH=opt.imgH, imgW=opt.imgW, keep_ratio_with_pad=opt.PAD)
@@ -64,10 +68,8 @@ class BatchBalancedDataModule(LightningDataModule):
         #     root=opt.train_data, opt=opt
         # )
 
-        # train_dataset = Batch_Balanced_Dataset(opt)
-        print("""
-            DATASET LOADED :
-        """)
+        train_dataset = Batch_Balanced_Dataset(opt)
+
         # print(train_dataset)
 
         # Now we have to split the dataset
@@ -85,10 +87,18 @@ class BatchBalancedDataModule(LightningDataModule):
 
         # AlignCollate_valid = AlignCollate(
         #     imgH=opt.imgH, imgW=opt.imgW, keep_ratio_with_pad=opt.PAD)
-        valid_dataset, valid_dataset_log = hierarchical_dataset(
-            root=opt.valid_data,
-            opt=opt
-        )
+
+        valid_opts = opt
+        valid_opts.select_data = opt.select_valid
+        valid_opts.batch_ratio = opt.batch_valid
+        valid_opts.train_data = opt.valid_data
+        # # print(f"validation_dataset: {valid_opts}")
+        valid_dataset = Batch_Balanced_Dataset(valid_opts)
+
+        #valid_dataset, valid_dataset_log = hierarchical_dataset(
+        #    root=opt.valid_data,
+        #    opt=opt
+        #)
         # valid_loader = torch.utils.data.DataLoader(
         # valid_dataset, batch_size=opt.batch_size,
         # #'True' to check training progress with validation function.
@@ -96,9 +106,9 @@ class BatchBalancedDataModule(LightningDataModule):
         # num_workers=int(opt.workers),
         # collate_fn=AlignCollate_valid, pin_memory=True)
 
-        # self.train_dataset = train_dataset
-        self.train_dataset = valid_dataset
-
+        self.train_dataset = train_dataset
+        # self.train_dataset = valid_dataset
+        # print(valid_dataset)
         self.val_dataset = valid_dataset
 
     @staticmethod
@@ -111,6 +121,10 @@ class BatchBalancedDataModule(LightningDataModule):
                             help='select training data (default is MJ-ST, which means MJ and ST used as training data)')
         parser.add_argument('--batch_ratio', type=str, default='0.5-0.5',
                             help='assign ratio for each selected data in the batch')
+        parser.add_argument('--select_valid', type=str, default='BAS',
+                            help='select validation data ')
+        parser.add_argument('--batch_valid', type=str, default='1.0',
+                            help='assign ratio for each selected data in the validation batch')
         parser.add_argument('--total_data_usage_ratio', type=str, default='1.0',
                             help='total data usage ratio, this ratio is multiplied to total number of data.')
         parser.add_argument('--batch_max_length', type=int,
@@ -128,6 +142,7 @@ class BatchBalancedDataModule(LightningDataModule):
                             help='whether to keep ratio then pad for image resize')
         parser.add_argument('--data_filtering_off',
                             action='store_true', help='for data_filtering_off mode')
+
         return parser
 
 
@@ -143,11 +158,11 @@ class Batch_Balanced_Dataset(object):
         dashed_line = '-' * 80
 
         # #log.write(dashed_line + '\n')
-        # print(
-        #     f'dataset_root: {opt.train_data}\nopt.select_data: {opt.select_data}\nopt.batch_ratio: {opt.batch_ratio}')
+        print(
+            f'dataset_root: {opt.train_data}\nopt.select_data: {opt.select_data}\nopt.batch_ratio: {opt.batch_ratio}')
         # #log.write(
         #     f'dataset_root: {opt.train_data}\nopt.select_data: {opt.select_data}\nopt.batch_ratio: {opt.batch_ratio}\n')
-        # print(f"{len(opt.select_data)} == {len(opt.batch_ratio)}")
+        print(f"{len(opt.select_data)} == {len(opt.batch_ratio)}")
         assert len(opt.select_data) == len(opt.batch_ratio)
 
         _AlignCollate = AlignCollate(
@@ -165,7 +180,7 @@ class Batch_Balanced_Dataset(object):
                 root=opt.train_data, opt=opt, select_data=[selected_d])
             total_number_dataset = len(_dataset)
             # log.write(_dataset_log)
-            # print(_dataset_log)
+            print(_dataset_log)
 
             """
             The total number of data can be modified with opt.total_data_usage_ratio.
@@ -201,11 +216,13 @@ class Batch_Balanced_Dataset(object):
         Total_batch_size_log += f'{dashed_line}'
         opt.batch_size = Total_batch_size
         self.batch_size = Total_batch_size
-        # print(Total_batch_size_log)
+        print(Total_batch_size_log)
         # log.write(Total_batch_size_log + '\n')
         # log.close()
 
     def get_batch(self):
+        print("GET_BATCH")
+
         balanced_batch_images = []
         balanced_batch_texts = []
 
